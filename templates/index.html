@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ .Title }}</title>
+<script src="/static/htmx.js"></script>
+<style>
+@font-face {
+  font-family: "Noto Sans";
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url("/static/fonts/noto-latin-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/static/fonts/lato-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/static/fonts/lato-700.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Lato";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("/static/fonts/lato-900.woff2") format("woff2");
+}
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" crossorigin="anonymous">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background-color: #24273a;
+}
+
+body {
+  font-family: "Noto Sans", sans-serif;
+  font-optical-sizing: auto;
+  font-weight: 400;
+  font-style: normal;
+  font-variation-settings: "wdth" 100;
+  color: #cad3f5;
+  background-color: #24273a;
+  min-height: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: #a6da95;
+}
+
+a:hover {
+  color: #a6da95;
+}
+
+#main-section {
+  padding: 0 0 2.5rem 0;
+}
+
+.container {
+  padding: 1.2rem 0.75rem;
+  max-width: 1344px;
+  margin: 0 auto;
+}
+
+h2 {
+  font-size: 1.3rem;
+  font-weight: normal;
+  margin-top: 1.2rem;
+  margin-bottom: 0.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+h2 i {
+  font-size: 1.4rem;
+  margin-right: 10px;
+  color: #a5adcb;
+}
+
+h2 span {
+  color: #cad3f5;
+}
+
+.columns {
+  display: flex;
+  flex-wrap: wrap;
+  margin: -0.75rem;
+}
+
+.column {
+  padding: 0.75rem;
+  flex: 0 0 calc(100% / {{ .Columns }});
+  max-width: calc(100% / {{ .Columns }});
+}
+
+@media (max-width: 900px) { .column { flex: 0 0 50%; max-width: 50%; } }
+@media (max-width: 600px) { .column { flex: 0 0 100%; max-width: 100%; } }
+
+/* Card — matches Homer exactly */
+.card {
+  background-color: #363a4f;
+  box-shadow: 0 2px 15px 0 rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 0.75rem;
+  transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+  overflow: visible;
+  position: relative;
+  max-width: 100%;
+}
+
+.card:hover {
+  background-color: #363a4f;
+  transform: translateY(-3px);
+}
+
+/* The <a> wraps the entire card-content, matching Generic.vue */
+.card > a {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  outline: none;
+}
+
+.card-content {
+  height: 85px;
+  padding: 1.3rem;
+  position: relative;
+}
+
+/* Media layout — from Bulma + Homer overrides */
+.media {
+  display: flex;
+  align-items: flex-start;
+  text-align: left;
+  height: 100%;
+}
+
+.media.no-subtitle {
+  align-items: center;
+}
+
+.media-left {
+  margin-inline-end: 0.5rem;
+  flex-shrink: 0;
+}
+
+.image.is-48x48 {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image.is-48x48 img {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.image.is-48x48 i {
+  font-size: 32px;
+  color: #cad3f5;
+}
+
+.media-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.title {
+  font-size: 1.1em;
+  line-height: 1.3em;
+  font-weight: 500;
+  color: #cad3f5;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.subtitle {
+  font-size: 0.9em;
+  font-weight: 300;
+  color: #a5adcb;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Badges — scoped styles from Jellyfin.vue / Miniflux.vue */
+.notifs {
+  position: absolute;
+  color: white;
+  font-family: sans-serif;
+  top: 0.3em;
+  right: 0.5em;
+}
+
+.notif {
+  display: inline-block;
+  padding: 0.2em 0.35em;
+  border-radius: 0.25em;
+  position: relative;
+  margin-left: 0.3em;
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+.notif.blue   { background-color: #4fb5d6; }
+.notif.red    { background-color: #e51111; }
+.notif.orange { background-color: #e5850e; }
+.notif.purple { background-color: #9b59b6; }
+
+/* Docker status dot — from Generic.vue */
+.docker-status {
+  border: 1px solid #000;
+  border-radius: 7px;
+  width: 7px;
+  height: 7px;
+  display: block;
+  position: absolute;
+  bottom: 0.5em;
+  right: 0.5em;
+}
+
+.docker-status.running { background-color: #94e185; border-color: #78d965; box-shadow: 0 0 5px 1px #94e185; }
+.docker-status.stopped { background-color: #c9404d; border-color: #c42c3b; box-shadow: 0 0 5px 1px #c9404d; }
+.docker-status.unknown { background-color: #888; border-color: #777; }
+</style>
+</head>
+<body>
+<section id="main-section">
+<div class="container">
+
+{{ range .Groups }}
+<h2>
+  {{ if .Icon }}<i class="{{ .Icon }}"></i>{{ end }}<span>{{ .Name }}</span>
+</h2>
+<div class="columns">
+  {{ range .Items }}
+  <div class="column">{{ template "tile" . }}</div>
+  {{ end }}
+</div>
+{{ end }}
+
+</div>
+</section>
+</body>
+</html>
+
+{{define "tile"}}
+<div id="tile-{{ .GroupSlug }}-{{ .ItemSlug }}"
+  {{- if .HasLive }} hx-get="/tile/{{ .GroupSlug }}/{{ .ItemSlug }}" hx-trigger="{{ if .HTMXResponse }}every {{ .IntervalSec }}s{{ else }}load, every {{ .IntervalSec }}s{{ end }}" hx-swap="outerHTML"{{ end }}>
+  <div class="card">
+    <a href="{{ .URL }}" target="{{ if .Target }}{{ .Target }}{{ else }}_blank{{ end }}" rel="noreferrer">
+      <div class="card-content">
+        <div class="{{ if .Subtitle }}media{{ else }}media no-subtitle{{ end }}">
+          <div class="media-left">
+            <figure class="image is-48x48">
+              {{ if .Logo }}<img src="{{ .Logo }}" alt="{{ .Name }}">
+              {{ else if .Icon }}<i class="fa-fw {{ .Icon }}"></i>
+              {{ end }}
+            </figure>
+          </div>
+          <div class="media-content">
+            <p class="title">{{ .Name }}</p>
+            {{ if .Subtitle }}<p class="subtitle">{{ .Subtitle }}</p>{{ end }}
+          </div>
+          {{ if .Badges }}
+          <div class="notifs">
+            {{ range .Badges }}<strong class="notif {{ .Color }}">{{ .Text }}</strong>{{ end }}
+          </div>
+          {{ end }}
+        </div>
+        {{ if .Docker }}<span class="docker-status {{ if .Docker.Known }}{{ if .Docker.Running }}running{{ else }}stopped{{ end }}{{ else }}unknown{{ end }}"></span>{{ end }}
+      </div>
+    </a>
+  </div>
+</div>
+{{end}}
