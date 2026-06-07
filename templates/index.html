@@ -76,9 +76,15 @@ a:hover {
 
 .container {
   padding: 1.2rem 0.75rem;
-  max-width: 1344px;
   margin: 0 auto;
+  position: relative;
+  width: auto;
 }
+
+/* Responsive container widths — matches Bulma/Homer */
+@media (min-width: 1024px) { .container { max-width: 960px; } }
+@media (min-width: 1216px) { .container { max-width: 1152px; } }
+@media (min-width: 1408px) { .container { max-width: 1344px; } }
 
 h2 {
   font-size: 1.3rem;
@@ -103,7 +109,7 @@ h2 span {
 .columns {
   display: flex;
   flex-wrap: wrap;
-  margin: -0.75rem;
+  margin: 0 -0.75rem;
 }
 
 .column {
@@ -118,7 +124,7 @@ h2 span {
 /* Card — matches Homer exactly */
 .card {
   background-color: #363a4f;
-  box-shadow: 0 2px 15px 0 rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 15px 0 rgba(0, 0, 0, 0.1);
   border: none;
   border-radius: 0.75rem;
   transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
