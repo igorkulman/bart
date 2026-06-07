@@ -110,7 +110,7 @@ func tileDataFor(item config.Item, groupSlug string) TileData {
 		Item:        item,
 		GroupSlug:   groupSlug,
 		ItemSlug:    slugify(item.Name),
-		HasLive:     item.Type != "",
+		HasLive:     item.Type != "" || item.Container != "",
 		IntervalSec: intervalSec(item.UpdateIntervalMs),
 		Subtitle:    template.HTML(item.Subtitle),
 	}
