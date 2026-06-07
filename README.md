@@ -1,22 +1,24 @@
-# bart
+# Bart
 
 A small, self-hosted homepage/dashboard for your home server, written in Go. It renders a static grid of links to your services and enriches each tile with **live data** pulled directly from the services' APIs — unread counts, download queues, now-playing sessions, sensor readings, container status, and more.
 
 It is a single binary with no external runtime dependencies. Templates, styles, and fonts are embedded, so deployment is "copy the binary (or run the container) and point it at a config file".
 
-## Why bart exists
+![Bart dashboard](screenshot.png)
 
-bart is a successor to [Homer](https://github.com/bastienwirtz/homer), built for my own setup.
+## Why Bart exists
+
+Bart is a successor to [Homer](https://github.com/bastienwirtz/homer), built for my own setup.
 
 I ran Homer happily for a long time, but over time I kept needing things it didn't do, and ended up maintaining an ever-growing fork:
 
-- **Backend API calls without a CORS proxy.** Homer is a static SPA, so any service that doesn't send permissive CORS headers needs a separate proxy in front of it (or a browser that ignores CORS). I had patched in a proxy server to work around this. bart sidesteps the whole problem: the **server** makes the API calls, so there is no CORS to fight and **API keys never reach the browser**.
-- **Docker container status.** I wanted a small "is this container running?" indicator on each tile. bart talks to the Docker socket directly and shows a status dot.
+- **Backend API calls without a CORS proxy.** Homer is a static SPA, so any service that doesn't send permissive CORS headers needs a separate proxy in front of it (or a browser that ignores CORS). I had patched in a proxy server to work around this. Bart sidesteps the whole problem: the **server** makes the API calls, so there is no CORS to fight and **API keys never reach the browser**.
+- **Docker container status.** I wanted a small "is this container running?" indicator on each tile. Bart talks to the Docker socket directly and shows a status dot.
 - **Services displayed the way I want.** I had a pile of custom tweaks to how individual services render their live data. Rewriting those as small Go functions is far easier to maintain than carrying patches on top of upstream Homer.
 
 At some point maintaining a divergent fork of a Vue/SPA app — rebasing on every upstream change, keeping a Node toolchain around — became more work than it was worth. A focused Go rewrite that does exactly what I need turned out to be the better idea. The visual design intentionally matches Homer's minimal Catppuccin theme, so it looks familiar.
 
-bart is opinionated and tailored to my needs. You're welcome to use it, but it is not trying to be a general-purpose, infinitely-configurable Homer replacement.
+Bart is opinionated and tailored to my needs. You're welcome to use it, but it is not trying to be a general-purpose, infinitely-configurable Homer replacement.
 
 ## Features
 
@@ -123,7 +125,7 @@ services:
 | `site`             | unifi             | UniFi site name (default `default`).                                                          |
 | `slug`             | uptimekuma        | Public status-page slug.                                                                      |
 
-> **`url` vs `apiUrl`:** `url` is the link your browser opens — it can use any hostname your browser resolves. `apiUrl` is what bart's backend uses to reach the service. If bart runs in a container where a hostname like `myserver` doesn't resolve, set `apiUrl` to an address the container can reach (e.g. a LAN IP). `apiUrl` is never exposed to the browser.
+> **`url` vs `apiUrl`:** `url` is the link your browser opens — it can use any hostname your browser resolves. `apiUrl` is what Bart's backend uses to reach the service. If Bart runs in a container where a hostname like `myserver` doesn't resolve, set `apiUrl` to an address the container can reach (e.g. a LAN IP). `apiUrl` is never exposed to the browser.
 
 ### Supported integrations
 
@@ -141,13 +143,13 @@ Any item **without** a `type` is just an icon and a link (optionally with a Dock
 
 ### Docker status
 
-If an item has a `container` field, bart queries the Docker socket and shows a small dot:
+If an item has a `container` field, Bart queries the Docker socket and shows a small dot:
 
 - 🟢 green — container running
 - 🔴 red — container exists but stopped
 - ⚪ grey — unknown (not found / socket unavailable)
 
-This requires the Docker socket to be readable by bart (mount it into the container, as in the compose example).
+This requires the Docker socket to be readable by Bart (mount it into the container, as in the compose example).
 
 ### Icons
 
