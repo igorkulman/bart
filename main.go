@@ -1,15 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"embed"
 	"flag"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"regexp"
 	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/igorkulman/bart/internal/config"
@@ -87,7 +92,7 @@ type TileData struct {
 	ItemSlug    string
 	Badges      []services.Badge
 	Subtitle    template.HTML
-	Docker      *docker.DockerStatus
+	Docker      *docker.Status
 	HasLive     bool
 	IntervalSec int
 	// HTMXResponse is true when this tile is returned from /tile/ endpoint;
@@ -98,22 +103,84 @@ type TileData struct {
 var slugRe = regexp.MustCompile(`[^a-z0-9]+`)
 
 func slugify(s string) string {
-	return slugRe.ReplaceAllString(strings.ToLower(s), "-")
+	return strings.Trim(slugRe.ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
 
+// intervalSec converts a millisecond interval to whole seconds, never returning
+// less than 1 so a tiny or zero value can't render "every 0s" and hammer HTMX.
 func intervalSec(ms int) int {
+	if ms < 1000 {
+		return 1
+	}
 	return ms / 1000
 }
 
-func tileDataFor(item config.Item, groupSlug string) TileData {
+// resolvedGroup / resolvedItem carry collision-free slugs. resolveGroups is the
+// single source of truth for slugs, used by both the dashboard and the per-tile
+// endpoint so their slugs always agree even when names collide.
+type resolvedGroup struct {
+	Name  string
+	Icon  string
+	Slug  string
+	Items []resolvedItem
+}
+
+type resolvedItem struct {
+	Slug string
+	Item config.Item
+}
+
+func resolveGroups(cfg *config.Config) []resolvedGroup {
+	groupSeen := map[string]int{}
+	groups := make([]resolvedGroup, 0, len(cfg.Services))
+	for _, g := range cfg.Services {
+		rg := resolvedGroup{Name: g.Name, Icon: g.Icon, Slug: uniqueSlug(slugify(g.Name), groupSeen)}
+		itemSeen := map[string]int{}
+		for _, item := range g.Items {
+			rg.Items = append(rg.Items, resolvedItem{
+				Slug: uniqueSlug(slugify(item.Name), itemSeen),
+				Item: item,
+			})
+		}
+		groups = append(groups, rg)
+	}
+	return groups
+}
+
+func uniqueSlug(base string, seen map[string]int) string {
+	if base == "" {
+		base = "item"
+	}
+	count := seen[base]
+	seen[base] = count + 1
+	if count == 0 {
+		return base
+	}
+	return fmt.Sprintf("%s-%d", base, count)
+}
+
+func tileDataFor(item config.Item, groupSlug, itemSlug string) TileData {
 	return TileData{
 		Item:        item,
 		GroupSlug:   groupSlug,
-		ItemSlug:    slugify(item.Name),
+		ItemSlug:    itemSlug,
 		HasLive:     item.Type != "" || item.Container != "",
 		IntervalSec: intervalSec(item.UpdateIntervalMs),
 		Subtitle:    template.HTML(item.Subtitle),
 	}
+}
+
+// renderTemplate renders into a buffer first so a mid-render error results in a
+// clean 500 instead of a half-written 200 response.
+func renderTemplate(w http.ResponseWriter, name string, data any) {
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, name, data); err != nil {
+		log.Printf("render %s: %v", name, err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = buf.WriteTo(w)
 }
 
 func dashboardHandler(w http.ResponseWriter, r *http.Request) {
@@ -123,25 +190,20 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cfg := getCfg()
-	var groups []GroupData
-	for _, g := range cfg.Services {
+	groups := make([]GroupData, 0, len(cfg.Services))
+	for _, g := range resolveGroups(cfg) {
 		gd := GroupData{Name: g.Name, Icon: g.Icon}
-		gslug := slugify(g.Name)
-		for _, item := range g.Items {
-			gd.Items = append(gd.Items, tileDataFor(item, gslug))
+		for _, it := range g.Items {
+			gd.Items = append(gd.Items, tileDataFor(it.Item, g.Slug, it.Slug))
 		}
 		groups = append(groups, gd)
 	}
 
-	data := PageData{
+	renderTemplate(w, "index.html", PageData{
 		Title:   cfg.Title,
 		Columns: cfg.Columns,
 		Groups:  groups,
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
-		log.Printf("template error: %v", err)
-	}
+	})
 }
 
 func tileHandler(w http.ResponseWriter, r *http.Request) {
@@ -152,53 +214,50 @@ func tileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	groupSlug, itemSlug := parts[0], parts[1]
 
-	cfg := getCfg()
-	var foundItem *config.Item
-	for _, g := range cfg.Services {
-		if slugify(g.Name) == groupSlug {
-			for i := range g.Items {
-				if slugify(g.Items[i].Name) == itemSlug {
-					foundItem = &g.Items[i]
-					break
-				}
+	var found *config.Item
+	for _, g := range resolveGroups(getCfg()) {
+		if g.Slug != groupSlug {
+			continue
+		}
+		for i := range g.Items {
+			if g.Items[i].Slug == itemSlug {
+				found = &g.Items[i].Item
+				break
 			}
 		}
-		if foundItem != nil {
-			break
-		}
+		break
 	}
 
-	if foundItem == nil {
+	if found == nil {
 		http.NotFound(w, r)
 		return
 	}
 
-	badges, subtitle, _ := fetchItemData(*foundItem)
+	badges, subtitle, err := fetchItemData(*found)
+	if err != nil {
+		log.Printf("fetch %q (%s): %v", found.Name, found.Type, err)
+	}
 	if subtitle == "" {
-		subtitle = template.HTML(foundItem.Subtitle)
+		subtitle = template.HTML(found.Subtitle)
 	}
 
-	var ds *docker.DockerStatus
-	if dockerCli := getDocker(); foundItem.Container != "" && dockerCli != nil {
-		status := dockerCli.ContainerStatus(foundItem.Container)
+	var ds *docker.Status
+	if dockerCli := getDocker(); found.Container != "" && dockerCli != nil {
+		status := dockerCli.ContainerStatus(found.Container)
 		ds = &status
 	}
 
-	data := TileData{
-		Item:         *foundItem,
+	renderTemplate(w, "tile", TileData{
+		Item:         *found,
 		GroupSlug:    groupSlug,
 		ItemSlug:     itemSlug,
 		Badges:       badges,
 		Subtitle:     subtitle,
 		Docker:       ds,
 		HasLive:      true,
-		IntervalSec:  intervalSec(foundItem.UpdateIntervalMs),
+		IntervalSec:  intervalSec(found.UpdateIntervalMs),
 		HTMXResponse: true,
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := tmpl.ExecuteTemplate(w, "tile", data); err != nil {
-		log.Printf("tile template error: %v", err)
-	}
+	})
 }
 
 func fetchItemData(item config.Item) ([]services.Badge, template.HTML, error) {
@@ -222,6 +281,18 @@ func fetchItemData(item config.Item) ([]services.Badge, template.HTML, error) {
 	}
 }
 
+// noDirListing wraps a file handler to return 404 for directory paths, so the
+// built-in FileServer doesn't expose directory listings.
+func noDirListing(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
 func main() {
 	configPath := flag.String("config", "config.yml", "path to config file")
 	addr := flag.String("addr", ":8080", "listen address")
@@ -242,11 +313,36 @@ func main() {
 
 	go watchConfig(*configPath)
 
-	http.HandleFunc("/", dashboardHandler)
-	http.HandleFunc("/tile/", tileHandler)
-	http.Handle("/static/", http.FileServer(http.FS(staticFiles)))
-	http.Handle("/assets/", http.StripPrefix("/assets/", http.FileServer(http.Dir(*assetsDir))))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", dashboardHandler)
+	mux.HandleFunc("/tile/", tileHandler)
+	mux.Handle("/static/", noDirListing(http.FileServer(http.FS(staticFiles))))
+	mux.Handle("/assets/", noDirListing(http.StripPrefix("/assets/", http.FileServer(http.Dir(*assetsDir)))))
 
-	log.Printf("bart listening on %s", *addr)
-	log.Fatal(http.ListenAndServe(*addr, nil))
+	srv := &http.Server{
+		Addr:              *addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		log.Printf("bart listening on %s", *addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("server error: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Println("shutting down")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("shutdown error: %v", err)
+	}
 }

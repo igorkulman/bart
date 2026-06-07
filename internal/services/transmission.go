@@ -23,11 +23,11 @@ func FetchTransmission(item config.Item) ([]Badge, SubtitleHTML, error) {
 	sessionID := transmissionSessions[base]
 	transmissionMu.Unlock()
 
-	badges, err := fetchTransmissionStats(item, base, sessionID)
+	badges, err := fetchTransmissionStats(item, base, sessionID, false)
 	return badges, "", err
 }
 
-func fetchTransmissionStats(item config.Item, base, sessionID string) ([]Badge, error) {
+func fetchTransmissionStats(item config.Item, base, sessionID string, retried bool) ([]Badge, error) {
 	body, _ := json.Marshal(map[string]string{"method": "session-stats"})
 	req, err := http.NewRequest("POST", base+"/transmission/rpc", bytes.NewReader(body))
 	if err != nil {
@@ -49,11 +49,14 @@ func fetchTransmissionStats(item config.Item, base, sessionID string) ([]Badge, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusConflict {
+		if retried {
+			return nil, fmt.Errorf("transmission: repeated HTTP 409 (session id not accepted)")
+		}
 		newID := resp.Header.Get("X-Transmission-Session-Id")
 		transmissionMu.Lock()
 		transmissionSessions[base] = newID
 		transmissionMu.Unlock()
-		return fetchTransmissionStats(item, base, newID)
+		return fetchTransmissionStats(item, base, newID, true)
 	}
 
 	if resp.StatusCode != http.StatusOK {

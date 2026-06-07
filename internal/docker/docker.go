@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 )
 
 type Client struct {
 	http *http.Client
 }
 
-type DockerStatus struct {
+type Status struct {
 	Running bool
 	Known   bool
 }
@@ -20,21 +21,21 @@ type DockerStatus struct {
 func NewClient(socketPath string) *Client {
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return net.Dial("unix", socketPath)
+			return (&net.Dialer{}).DialContext(ctx, "unix", socketPath)
 		},
 	}
-	return &Client{http: &http.Client{Transport: transport}}
+	return &Client{http: &http.Client{Transport: transport, Timeout: 5 * time.Second}}
 }
 
-func (c *Client) ContainerStatus(name string) DockerStatus {
+func (c *Client) ContainerStatus(name string) Status {
 	resp, err := c.http.Get(fmt.Sprintf("http://localhost/containers/%s/json", name))
 	if err != nil {
-		return DockerStatus{}
+		return Status{}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return DockerStatus{}
+		return Status{}
 	}
 
 	var data struct {
@@ -43,7 +44,7 @@ func (c *Client) ContainerStatus(name string) DockerStatus {
 		} `json:"State"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return DockerStatus{}
+		return Status{}
 	}
-	return DockerStatus{Running: data.State.Running, Known: true}
+	return Status{Running: data.State.Running, Known: true}
 }

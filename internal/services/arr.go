@@ -6,7 +6,7 @@ import (
 
 func FetchArr(item config.Item) ([]Badge, SubtitleHTML, error) {
 	base := endpointFor(item)
-	apikey := item.ApiKey
+	headers := map[string]string{"X-Api-Key": item.ApiKey}
 
 	var badges []Badge
 
@@ -15,7 +15,7 @@ func FetchArr(item config.Item) ([]Badge, SubtitleHTML, error) {
 	}
 	addCount := func(path, color string) {
 		var r countResp
-		if err := getJSON(base+path+"?apikey="+apikey, nil, &r); err == nil && r.TotalRecords > 0 {
+		if err := getJSON(base+path, headers, &r); err == nil && r.TotalRecords > 0 {
 			badges = append(badges, newBadge(r.TotalRecords, color))
 		}
 	}
@@ -25,7 +25,7 @@ func FetchArr(item config.Item) ([]Badge, SubtitleHTML, error) {
 	var health []struct {
 		Type string `json:"type"`
 	}
-	if err := getJSON(base+"/api/v3/health?apikey="+apikey, nil, &health); err == nil {
+	if err := getJSON(base+"/api/v3/health", headers, &health); err == nil {
 		warnings, errors := 0, 0
 		for _, h := range health {
 			switch h.Type {

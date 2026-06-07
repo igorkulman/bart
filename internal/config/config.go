@@ -7,10 +7,10 @@ import (
 )
 
 type Config struct {
-	Title        string    `yaml:"title"`
-	Columns      int       `yaml:"columns"`
-	DockerSocket string    `yaml:"dockerSocket"`
-	Services     []Group   `yaml:"services"`
+	Title        string  `yaml:"title"`
+	Columns      int     `yaml:"columns"`
+	DockerSocket string  `yaml:"dockerSocket"`
+	Services     []Group `yaml:"services"`
 }
 
 type Group struct {
@@ -20,24 +20,24 @@ type Group struct {
 }
 
 type Item struct {
-	Name             string            `yaml:"name"`
-	Type             string            `yaml:"type"`
-	URL              string            `yaml:"url"`
-	ApiURL           string            `yaml:"apiUrl"`
-	Logo             string            `yaml:"logo"`
-	Icon             string            `yaml:"icon"`
-	ApiKey           string            `yaml:"apikey"`
-	Username         string            `yaml:"username"`
-	Password         string            `yaml:"password"`
-	Container        string            `yaml:"container"`
-	UpdateIntervalMs int               `yaml:"updateIntervalMs"`
-	Target           string            `yaml:"target"`
-	Slug             string            `yaml:"slug"`
-	Sensors          []Sensor          `yaml:"sensors"`
-	Site             string            `yaml:"site"`
-	Style            string            `yaml:"style"`
-	Subtitle         string            `yaml:"subtitle"`
-	ShowUnits        *bool             `yaml:"showUnits"`
+	Name             string   `yaml:"name"`
+	Type             string   `yaml:"type"`
+	URL              string   `yaml:"url"`
+	ApiURL           string   `yaml:"apiUrl"`
+	Logo             string   `yaml:"logo"`
+	Icon             string   `yaml:"icon"`
+	ApiKey           string   `yaml:"apikey"`
+	Username         string   `yaml:"username"`
+	Password         string   `yaml:"password"`
+	Container        string   `yaml:"container"`
+	UpdateIntervalMs int      `yaml:"updateIntervalMs"`
+	Target           string   `yaml:"target"`
+	Slug             string   `yaml:"slug"`
+	Sensors          []Sensor `yaml:"sensors"`
+	Site             string   `yaml:"site"`
+	Style            string   `yaml:"style"`
+	Subtitle         string   `yaml:"subtitle"`
+	ShowUnits        *bool    `yaml:"showUnits"`
 }
 
 type Sensor struct {

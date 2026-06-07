@@ -7,11 +7,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/igorkulman/bart/internal/config"
 )
 
-var httpClient = &http.Client{}
+var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 type Badge struct {
 	Text  string

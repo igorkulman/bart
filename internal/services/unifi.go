@@ -5,10 +5,12 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/igorkulman/bart/internal/config"
 )
@@ -32,7 +34,7 @@ func getUnifiClient(key string) *unifiClient {
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
 	}
-	c := &unifiClient{http: &http.Client{Jar: jar, Transport: transport}}
+	c := &unifiClient{http: &http.Client{Jar: jar, Transport: transport, Timeout: 10 * time.Second}}
 	unifiClients[key] = c
 	return c
 }
@@ -54,7 +56,12 @@ func FetchUnifi(item config.Item) ([]Badge, SubtitleHTML, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	// Drain so the connection can be reused; the session cookie is in the headers.
+	_, _ = io.Copy(io.Discard, resp.Body)
 	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("unifi login: HTTP %d", resp.StatusCode)
+	}
 
 	var result struct {
 		Data []struct {
