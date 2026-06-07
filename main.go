@@ -6,8 +6,11 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/igorkulman/bart/internal/config"
 	"github.com/igorkulman/bart/internal/docker"
@@ -21,10 +24,50 @@ var templateFiles embed.FS
 var staticFiles embed.FS
 
 var (
-	cfg       *config.Config
-	dockerCli *docker.Client
-	tmpl      *template.Template
+	cfgStore    atomic.Pointer[config.Config]
+	dockerStore atomic.Pointer[docker.Client]
+	tmpl        *template.Template
 )
+
+// getCfg returns the currently loaded configuration. It is swapped atomically
+// by watchConfig, so callers always get a consistent snapshot.
+func getCfg() *config.Config { return cfgStore.Load() }
+
+// getDocker returns the current docker client (recreated if the socket changes).
+func getDocker() *docker.Client { return dockerStore.Load() }
+
+// watchConfig polls the config file and reloads it on change so edits take
+// effect without restarting the container. A failed reload keeps the previous
+// config so a malformed edit can't take the dashboard down.
+func watchConfig(path string) {
+	var last time.Time
+	if fi, err := os.Stat(path); err == nil {
+		last = fi.ModTime()
+	}
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		fi, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		if !fi.ModTime().After(last) {
+			continue
+		}
+		last = fi.ModTime()
+
+		newCfg, err := config.Load(path)
+		if err != nil {
+			log.Printf("config reload failed, keeping previous version: %v", err)
+			continue
+		}
+		if newCfg.DockerSocket != getCfg().DockerSocket {
+			dockerStore.Store(docker.NewClient(newCfg.DockerSocket))
+		}
+		cfgStore.Store(newCfg)
+		log.Printf("config reloaded from %s", path)
+	}
+}
 
 type PageData struct {
 	Title   string
@@ -79,6 +122,7 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	cfg := getCfg()
 	var groups []GroupData
 	for _, g := range cfg.Services {
 		gd := GroupData{Name: g.Name, Icon: g.Icon}
@@ -108,6 +152,7 @@ func tileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	groupSlug, itemSlug := parts[0], parts[1]
 
+	cfg := getCfg()
 	var foundItem *config.Item
 	for _, g := range cfg.Services {
 		if slugify(g.Name) == groupSlug {
@@ -134,7 +179,7 @@ func tileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var ds *docker.DockerStatus
-	if foundItem.Container != "" && dockerCli != nil {
+	if dockerCli := getDocker(); foundItem.Container != "" && dockerCli != nil {
 		status := dockerCli.ContainerStatus(foundItem.Container)
 		ds = &status
 	}
@@ -183,18 +228,19 @@ func main() {
 	assetsDir := flag.String("assets", "./assets", "directory to serve at /assets/")
 	flag.Parse()
 
-	var err error
-	cfg, err = config.Load(*configPath)
+	cfg, err := config.Load(*configPath)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
-
-	dockerCli = docker.NewClient(cfg.DockerSocket)
+	cfgStore.Store(cfg)
+	dockerStore.Store(docker.NewClient(cfg.DockerSocket))
 
 	tmpl, err = template.New("").ParseFS(templateFiles, "templates/*.html")
 	if err != nil {
 		log.Fatalf("parse templates: %v", err)
 	}
+
+	go watchConfig(*configPath)
 
 	http.HandleFunc("/", dashboardHandler)
 	http.HandleFunc("/tile/", tileHandler)
