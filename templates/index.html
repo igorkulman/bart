@@ -253,11 +253,60 @@ h2 span {
 .docker-status.running { background-color: #94e185; border-color: #78d965; box-shadow: 0 0 5px 1px #94e185; }
 .docker-status.stopped { background-color: #c9404d; border-color: #c42c3b; box-shadow: 0 0 5px 1px #c9404d; }
 .docker-status.unknown { background-color: #888; border-color: #777; }
+
+/* System stats bar */
+.sysinfo-bar {
+  display: flex;
+  gap: 1.25rem;
+  padding: 0.4rem 0 0.75rem 0;
+}
+
+.sysinfo-item {
+  width: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sysinfo-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #cad3f5;
+}
+
+.sysinfo-label i {
+  font-size: 1rem;
+  color: #cad3f5;
+  width: 1rem;
+  text-align: center;
+}
+
+.sysinfo-progress {
+  height: 2px;
+  background-color: #494d64;
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.sysinfo-progress-fill {
+  height: 100%;
+  background-color: #a5adcb;
+  border-radius: 1px;
+  transition: width 0.4s ease;
+}
 </style>
 </head>
 <body>
 <section id="main-section">
 <div class="container">
+
+{{ if .SysInfo }}
+<div id="sysinfo-widget" hx-get="/sysinfo" hx-trigger="every 2s" hx-swap="innerHTML">
+  {{ template "sysinfo-inner" .SysInfo }}
+</div>
+{{ end }}
 
 {{ range .Groups }}
 <h2>
@@ -274,6 +323,38 @@ h2 span {
 </section>
 </body>
 </html>
+
+{{define "sysinfo-inner"}}
+<div class="sysinfo-bar">
+  <div class="sysinfo-item">
+    <div class="sysinfo-label">
+      <i class="fa-solid fa-microchip"></i>
+      <span>{{ .CPUPercent }}%</span>
+    </div>
+    <div class="sysinfo-progress">
+      <div class="sysinfo-progress-fill" style="width: {{ .CPUPercent }}%"></div>
+    </div>
+  </div>
+  <div class="sysinfo-item">
+    <div class="sysinfo-label">
+      <i class="fa-solid fa-memory"></i>
+      <span>{{ .MemFreeStr }} Free</span>
+    </div>
+    <div class="sysinfo-progress">
+      <div class="sysinfo-progress-fill" style="width: {{ .MemUsedPct }}%"></div>
+    </div>
+  </div>
+  <div class="sysinfo-item">
+    <div class="sysinfo-label">
+      <i class="fa-solid fa-hard-drive"></i>
+      <span>{{ .DiskFreeStr }} Free</span>
+    </div>
+    <div class="sysinfo-progress">
+      <div class="sysinfo-progress-fill" style="width: {{ .DiskUsedPct }}%"></div>
+    </div>
+  </div>
+</div>
+{{end}}
 
 {{define "tile"}}
 <div id="tile-{{ .GroupSlug }}-{{ .ItemSlug }}"

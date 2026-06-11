@@ -6,11 +6,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type SysInfoConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Disk    string `yaml:"disk"`
+}
+
 type Config struct {
-	Title        string  `yaml:"title"`
-	Columns      int     `yaml:"columns"`
-	DockerSocket string  `yaml:"dockerSocket"`
-	Services     []Group `yaml:"services"`
+	Title        string        `yaml:"title"`
+	Columns      int           `yaml:"columns"`
+	DockerSocket string        `yaml:"dockerSocket"`
+	SysInfo      SysInfoConfig `yaml:"sysInfo"`
+	Services     []Group       `yaml:"services"`
 }
 
 type Group struct {
@@ -59,6 +65,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.DockerSocket == "" {
 		cfg.DockerSocket = "/var/run/docker.sock"
+	}
+	if cfg.SysInfo.Disk == "" {
+		cfg.SysInfo.Disk = "/"
 	}
 	for i := range cfg.Services {
 		for j := range cfg.Services[i].Items {

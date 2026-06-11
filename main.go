@@ -20,6 +20,7 @@ import (
 	"github.com/igorkulman/bart/internal/config"
 	"github.com/igorkulman/bart/internal/docker"
 	"github.com/igorkulman/bart/internal/services"
+	"github.com/igorkulman/bart/internal/sysinfo"
 )
 
 //go:embed templates/*
@@ -31,6 +32,7 @@ var staticFiles embed.FS
 var (
 	cfgStore    atomic.Pointer[config.Config]
 	dockerStore atomic.Pointer[docker.Client]
+	sysSampler  *sysinfo.Sampler
 	tmpl        *template.Template
 )
 
@@ -77,7 +79,16 @@ func watchConfig(path string) {
 type PageData struct {
 	Title   string
 	Columns int
+	SysInfo *SysInfoData
 	Groups  []GroupData
+}
+
+type SysInfoData struct {
+	CPUPercent  int
+	MemFreeStr  string
+	MemUsedPct  int
+	DiskFreeStr string
+	DiskUsedPct int
 }
 
 type GroupData struct {
@@ -183,6 +194,45 @@ func renderTemplate(w http.ResponseWriter, name string, data any) {
 	_, _ = buf.WriteTo(w)
 }
 
+func formatKB(kb uint64) string {
+	gb := float64(kb) / (1024 * 1024)
+	if gb >= 1000 {
+		return fmt.Sprintf("%d TB", int(gb/1024))
+	}
+	return fmt.Sprintf("%d GB", int(gb))
+}
+
+func formatBytes(b uint64) string {
+	gb := float64(b) / (1024 * 1024 * 1024)
+	if gb >= 1000 {
+		return fmt.Sprintf("%d TB", int(gb/1024))
+	}
+	return fmt.Sprintf("%d GB", int(gb))
+}
+
+func pct(part, total uint64) int {
+	if total == 0 {
+		return 0
+	}
+	return int(part * 100 / total)
+}
+
+func sysinfoHandler(w http.ResponseWriter, r *http.Request) {
+	if sysSampler == nil {
+		http.NotFound(w, r)
+		return
+	}
+	s := sysSampler.Current()
+	data := SysInfoData{
+		CPUPercent:  s.CPUPercent,
+		MemFreeStr:  formatKB(s.MemAvailKB),
+		MemUsedPct:  pct(s.MemTotalKB-s.MemAvailKB, s.MemTotalKB),
+		DiskFreeStr: formatBytes(s.DiskFree),
+		DiskUsedPct: pct(s.DiskTotal-s.DiskFree, s.DiskTotal),
+	}
+	renderTemplate(w, "sysinfo-inner", data)
+}
+
 func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -199,11 +249,22 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		groups = append(groups, gd)
 	}
 
-	renderTemplate(w, "index.html", PageData{
+	pd := PageData{
 		Title:   cfg.Title,
 		Columns: cfg.Columns,
 		Groups:  groups,
-	})
+	}
+	if cfg.SysInfo.Enabled && sysSampler != nil {
+		s := sysSampler.Current()
+		pd.SysInfo = &SysInfoData{
+			CPUPercent:  s.CPUPercent,
+			MemFreeStr:  formatKB(s.MemAvailKB),
+			MemUsedPct:  pct(s.MemTotalKB-s.MemAvailKB, s.MemTotalKB),
+			DiskFreeStr: formatBytes(s.DiskFree),
+			DiskUsedPct: pct(s.DiskTotal-s.DiskFree, s.DiskTotal),
+		}
+	}
+	renderTemplate(w, "index.html", pd)
 }
 
 func tileHandler(w http.ResponseWriter, r *http.Request) {
@@ -305,6 +366,8 @@ func main() {
 	}
 	cfgStore.Store(cfg)
 	dockerStore.Store(docker.NewClient(cfg.DockerSocket))
+	sysSampler = sysinfo.NewSampler(cfg.SysInfo.Disk)
+	sysSampler.Start()
 
 	tmpl, err = template.New("").ParseFS(templateFiles, "templates/*.html")
 	if err != nil {
@@ -316,6 +379,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", dashboardHandler)
 	mux.HandleFunc("/tile/", tileHandler)
+	mux.HandleFunc("/sysinfo", sysinfoHandler)
 	mux.Handle("/static/", noDirListing(http.FileServer(http.FS(staticFiles))))
 	mux.Handle("/assets/", noDirListing(http.StripPrefix("/assets/", http.FileServer(http.Dir(*assetsDir)))))
 
