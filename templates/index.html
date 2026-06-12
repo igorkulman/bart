@@ -254,11 +254,51 @@ h2 span {
 .docker-status.stopped { background-color: #c9404d; border-color: #c42c3b; box-shadow: 0 0 5px 1px #c9404d; }
 .docker-status.unknown { background-color: #888; border-color: #777; }
 
+/* Top widget bar — wraps sysinfo (left) + weather (right) */
+.top-bar {
+  display: flex;
+  align-items: center;
+  padding: 0.4rem 0 0.75rem 0;
+}
+
+#weather-widget {
+  margin-left: auto;
+}
+
+/* Weather widget */
+.weather-widget {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.weather-widget i {
+  font-size: 1.5rem;
+  color: #cad3f5;
+}
+
+.weather-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.weather-temp {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #cad3f5;
+  line-height: 1.2;
+}
+
+.weather-desc {
+  font-size: 0.75rem;
+  color: #a5adcb;
+}
+
 /* System stats bar */
 .sysinfo-bar {
   display: flex;
   gap: 1.25rem;
-  padding: 0.4rem 0 0.75rem 0;
 }
 
 .sysinfo-item {
@@ -302,9 +342,18 @@ h2 span {
 <section id="main-section">
 <div class="container">
 
-{{ if .SysInfo }}
-<div id="sysinfo-widget" hx-get="/sysinfo" hx-trigger="every 2s" hx-swap="innerHTML">
-  {{ template "sysinfo-inner" .SysInfo }}
+{{ if or .SysInfo .Weather }}
+<div class="top-bar">
+  {{ if .SysInfo }}
+  <div id="sysinfo-widget" hx-get="/sysinfo" hx-trigger="every 2s" hx-swap="innerHTML">
+    {{ template "sysinfo-inner" .SysInfo }}
+  </div>
+  {{ end }}
+  {{ if .Weather }}
+  <div id="weather-widget" hx-get="/weather" hx-trigger="every 900s" hx-swap="innerHTML">
+    {{ template "weather-inner" .Weather }}
+  </div>
+  {{ end }}
 </div>
 {{ end }}
 
@@ -323,6 +372,16 @@ h2 span {
 </section>
 </body>
 </html>
+
+{{define "weather-inner"}}
+<div class="weather-widget">
+  <i class="{{ .FAIcon }}"></i>
+  <div class="weather-info">
+    <span class="weather-temp">{{ .Temp }}</span>
+    <span class="weather-desc">{{ .Description }}</span>
+  </div>
+</div>
+{{end}}
 
 {{define "sysinfo-inner"}}
 <div class="sysinfo-bar">

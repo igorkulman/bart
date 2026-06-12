@@ -11,11 +11,20 @@ type SysInfoConfig struct {
 	Disk    string `yaml:"disk"`
 }
 
+type WeatherConfig struct {
+	Enabled   bool    `yaml:"enabled"`
+	APIKey    string  `yaml:"apiKey"`
+	Latitude  float64 `yaml:"latitude"`
+	Longitude float64 `yaml:"longitude"`
+	Units     string  `yaml:"units"` // metric, imperial, standard
+}
+
 type Config struct {
 	Title        string        `yaml:"title"`
 	Columns      int           `yaml:"columns"`
 	DockerSocket string        `yaml:"dockerSocket"`
 	SysInfo      SysInfoConfig `yaml:"sysInfo"`
+	Weather      WeatherConfig `yaml:"weather"`
 	Services     []Group       `yaml:"services"`
 }
 
@@ -68,6 +77,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.SysInfo.Disk == "" {
 		cfg.SysInfo.Disk = "/"
+	}
+	if cfg.Weather.Units == "" {
+		cfg.Weather.Units = "metric"
 	}
 	for i := range cfg.Services {
 		for j := range cfg.Services[i].Items {

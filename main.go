@@ -21,6 +21,7 @@ import (
 	"github.com/igorkulman/bart/internal/docker"
 	"github.com/igorkulman/bart/internal/services"
 	"github.com/igorkulman/bart/internal/sysinfo"
+	"github.com/igorkulman/bart/internal/weather"
 )
 
 //go:embed templates/*
@@ -30,10 +31,11 @@ var templateFiles embed.FS
 var staticFiles embed.FS
 
 var (
-	cfgStore    atomic.Pointer[config.Config]
-	dockerStore atomic.Pointer[docker.Client]
-	sysSampler  *sysinfo.Sampler
-	tmpl        *template.Template
+	cfgStore       atomic.Pointer[config.Config]
+	dockerStore    atomic.Pointer[docker.Client]
+	sysSampler     *sysinfo.Sampler
+	weatherFetcher *weather.Fetcher
+	tmpl           *template.Template
 )
 
 // getCfg returns the currently loaded configuration. It is swapped atomically
@@ -80,7 +82,14 @@ type PageData struct {
 	Title   string
 	Columns int
 	SysInfo *SysInfoData
+	Weather *WeatherData
 	Groups  []GroupData
+}
+
+type WeatherData struct {
+	Temp        string
+	Description string
+	FAIcon      string
 }
 
 type SysInfoData struct {
@@ -233,6 +242,57 @@ func sysinfoHandler(w http.ResponseWriter, r *http.Request) {
 	renderTemplate(w, "sysinfo-inner", data)
 }
 
+func owmIconToFA(code string) string {
+	switch {
+	case strings.HasPrefix(code, "01"):
+		if strings.HasSuffix(code, "d") {
+			return "fa-solid fa-sun"
+		}
+		return "fa-solid fa-moon"
+	case strings.HasPrefix(code, "02"):
+		if strings.HasSuffix(code, "d") {
+			return "fa-solid fa-cloud-sun"
+		}
+		return "fa-solid fa-cloud-moon"
+	case strings.HasPrefix(code, "03"), strings.HasPrefix(code, "04"):
+		return "fa-solid fa-cloud"
+	case strings.HasPrefix(code, "09"):
+		return "fa-solid fa-cloud-showers-heavy"
+	case strings.HasPrefix(code, "10"):
+		return "fa-solid fa-cloud-rain"
+	case strings.HasPrefix(code, "11"):
+		return "fa-solid fa-bolt"
+	case strings.HasPrefix(code, "13"):
+		return "fa-solid fa-snowflake"
+	case strings.HasPrefix(code, "50"):
+		return "fa-solid fa-smog"
+	default:
+		return "fa-solid fa-cloud"
+	}
+}
+
+func weatherDataFrom(d *weather.Data) *WeatherData {
+	return &WeatherData{
+		Temp:        d.Temp,
+		Description: d.Description,
+		FAIcon:      owmIconToFA(d.IconCode),
+	}
+}
+
+func weatherHandler(w http.ResponseWriter, r *http.Request) {
+	if weatherFetcher == nil {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := weatherFetcher.Current()
+	if err != nil {
+		log.Printf("weather fetch: %v", err)
+		http.Error(w, "weather unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	renderTemplate(w, "weather-inner", weatherDataFrom(data))
+}
+
 func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
@@ -262,6 +322,11 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 			MemUsedPct:  pct(s.MemTotalKB-s.MemAvailKB, s.MemTotalKB),
 			DiskFreeStr: formatBytes(s.DiskFree),
 			DiskUsedPct: pct(s.DiskTotal-s.DiskFree, s.DiskTotal),
+		}
+	}
+	if cfg.Weather.Enabled && weatherFetcher != nil {
+		if data, err := weatherFetcher.Current(); err == nil {
+			pd.Weather = weatherDataFrom(data)
 		}
 	}
 	renderTemplate(w, "index.html", pd)
@@ -368,6 +433,14 @@ func main() {
 	dockerStore.Store(docker.NewClient(cfg.DockerSocket))
 	sysSampler = sysinfo.NewSampler(cfg.SysInfo.Disk)
 	sysSampler.Start()
+	if cfg.Weather.Enabled {
+		weatherFetcher = weather.New(weather.Config{
+			APIKey:    cfg.Weather.APIKey,
+			Latitude:  cfg.Weather.Latitude,
+			Longitude: cfg.Weather.Longitude,
+			Units:     cfg.Weather.Units,
+		})
+	}
 
 	tmpl, err = template.New("").ParseFS(templateFiles, "templates/*.html")
 	if err != nil {
@@ -380,6 +453,7 @@ func main() {
 	mux.HandleFunc("/", dashboardHandler)
 	mux.HandleFunc("/tile/", tileHandler)
 	mux.HandleFunc("/sysinfo", sysinfoHandler)
+	mux.HandleFunc("/weather", weatherHandler)
 	mux.Handle("/static/", noDirListing(http.FileServer(http.FS(staticFiles))))
 	mux.Handle("/assets/", noDirListing(http.StripPrefix("/assets/", http.FileServer(http.Dir(*assetsDir)))))
 
