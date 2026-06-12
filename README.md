@@ -27,6 +27,8 @@ Bart is opinionated and tailored to my needs. You're welcome to use it, but it i
 - **Live tiles via HTMX** — tiles refresh themselves on an interval without a full-page SPA.
 - **Docker status dots** — green/red/grey indicator per tile, read straight from the Docker socket.
 - **Config hot-reload** — edit `config.yml` and changes are picked up within a couple of seconds, no restart needed. A broken edit is logged and ignored, keeping the last good config live.
+- **System stats bar** — live CPU usage, free RAM, and free disk space displayed at the top of the page (Linux/Docker only).
+- **Weather widget** — current conditions and temperature via OpenWeatherMap, shown top-right alongside the stats bar.
 - **Built-in integrations** — Home Assistant, Sonarr/Radarr/Prowlarr, Jellyfin, Miniflux, Transmission, Uptime Kuma, UniFi.
 - **Plain links for everything else** — any service can be a simple icon + link with no integration.
 
@@ -81,6 +83,8 @@ Configuration is a single YAML file. Top-level keys:
 | `title`        | Page title (browser tab).                                          |
 | `columns`      | Number of columns in the grid (default `3`).                       |
 | `dockerSocket` | Path to the Docker socket (default `/var/run/docker.sock`).        |
+| `sysInfo`      | System stats bar config (see below).                               |
+| `weather`      | Weather widget config (see below).                                 |
 | `services`     | List of groups; each group has a `name`, `icon`, and `items`.      |
 
 A minimal example:
@@ -89,6 +93,17 @@ A minimal example:
 title: "Home Lab"
 columns: 3
 dockerSocket: /var/run/docker.sock
+
+sysInfo:
+  enabled: true
+  disk: "/"
+
+weather:
+  enabled: true
+  apiKey: "your_owm_api_key"
+  latitude: 50.09
+  longitude: 14.50
+  units: metric
 
 services:
   - name: Media
@@ -102,6 +117,29 @@ services:
         apikey: "xxxxxxxxxxxxxxxx"
         container: jellyfin
         updateIntervalMs: 30000
+```
+
+### System stats bar
+
+Shows CPU usage, free RAM, and free disk space in a bar at the top-left of the page. Reads `/proc/stat` and `/proc/meminfo`; disk is measured with `statfs`. Designed for Linux — does nothing on macOS or Windows.
+
+```yaml
+sysInfo:
+  enabled: true
+  disk: "/"          # mount point to measure (default "/")
+```
+
+### Weather widget
+
+Shows current conditions and temperature top-right, next to the stats bar. Fetches from [OpenWeatherMap](https://openweathermap.org/) every 15 minutes and caches the result. A free API key is sufficient.
+
+```yaml
+weather:
+  enabled: true
+  apiKey: "your_owm_api_key"
+  latitude: 50.09
+  longitude: 14.50
+  units: metric      # metric (°C), imperial (°F), or standard (K) — default metric
 ```
 
 ### Item fields
