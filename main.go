@@ -94,9 +94,9 @@ type WeatherData struct {
 
 type SysInfoData struct {
 	CPUPercent  int
-	MemFreeStr  string
+	MemStr      string
 	MemUsedPct  int
-	DiskFreeStr string
+	DiskStr     string
 	DiskUsedPct int
 }
 
@@ -203,20 +203,30 @@ func renderTemplate(w http.ResponseWriter, name string, data any) {
 	_, _ = buf.WriteTo(w)
 }
 
-func formatKB(kb uint64) string {
-	gb := float64(kb) / (1024 * 1024)
-	if gb >= 1000 {
-		return fmt.Sprintf("%d TB", int(gb/1024))
+func usedTotalKB(usedKB, totalKB uint64) string {
+	u := usedKB / (1024 * 1024)
+	t := totalKB / (1024 * 1024)
+	if t >= 1000 {
+		return fmt.Sprintf("%d/%d TB", u/1024, t/1024)
 	}
-	return fmt.Sprintf("%d GB", int(gb))
+	return fmt.Sprintf("%d/%d GB", u, t)
 }
 
-func formatBytes(b uint64) string {
-	gb := float64(b) / (1024 * 1024 * 1024)
-	if gb >= 1000 {
-		return fmt.Sprintf("%d TB", int(gb/1024))
+func usedTotalBytes(usedB, totalB uint64) string {
+	u := usedB / (1024 * 1024 * 1024)
+	t := totalB / (1024 * 1024 * 1024)
+	if t >= 1000 {
+		return fmt.Sprintf("%d/%d TB", u/1024, t/1024)
 	}
-	return fmt.Sprintf("%d GB", int(gb))
+	return fmt.Sprintf("%d/%d GB", u, t)
+}
+
+func freeBytes(b uint64) string {
+	gb := b / (1024 * 1024 * 1024)
+	if gb >= 1000 {
+		return fmt.Sprintf("%d TB", gb/1024)
+	}
+	return fmt.Sprintf("%d GB", gb)
 }
 
 func pct(part, total uint64) int {
@@ -234,9 +244,9 @@ func sysinfoHandler(w http.ResponseWriter, r *http.Request) {
 	s := sysSampler.Current()
 	data := SysInfoData{
 		CPUPercent:  s.CPUPercent,
-		MemFreeStr:  formatKB(s.MemAvailKB),
+		MemStr:      usedTotalKB(s.MemTotalKB-s.MemAvailKB, s.MemTotalKB),
 		MemUsedPct:  pct(s.MemTotalKB-s.MemAvailKB, s.MemTotalKB),
-		DiskFreeStr: formatBytes(s.DiskFree),
+		DiskStr:     freeBytes(s.DiskFree),
 		DiskUsedPct: pct(s.DiskTotal-s.DiskFree, s.DiskTotal),
 	}
 	renderTemplate(w, "sysinfo-inner", data)
@@ -318,9 +328,9 @@ func dashboardHandler(w http.ResponseWriter, r *http.Request) {
 		s := sysSampler.Current()
 		pd.SysInfo = &SysInfoData{
 			CPUPercent:  s.CPUPercent,
-			MemFreeStr:  formatKB(s.MemAvailKB),
+			MemStr:      usedTotalKB(s.MemTotalKB-s.MemAvailKB, s.MemTotalKB),
 			MemUsedPct:  pct(s.MemTotalKB-s.MemAvailKB, s.MemTotalKB),
-			DiskFreeStr: formatBytes(s.DiskFree),
+			DiskStr:     freeBytes(s.DiskFree),
 			DiskUsedPct: pct(s.DiskTotal-s.DiskFree, s.DiskTotal),
 		}
 	}

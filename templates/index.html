@@ -302,7 +302,7 @@ h2 span {
 }
 
 .sysinfo-item {
-  width: 100px;
+  width: 80px;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
@@ -397,7 +397,7 @@ h2 span {
   <div class="sysinfo-item">
     <div class="sysinfo-label">
       <i class="fa-solid fa-memory"></i>
-      <span>{{ .MemFreeStr }} Free</span>
+      <span>{{ .MemStr }}</span>
     </div>
     <div class="sysinfo-progress">
       <div class="sysinfo-progress-fill" style="width: {{ .MemUsedPct }}%"></div>
@@ -406,7 +406,7 @@ h2 span {
   <div class="sysinfo-item">
     <div class="sysinfo-label">
       <i class="fa-solid fa-hard-drive"></i>
-      <span>{{ .DiskFreeStr }} Free</span>
+      <span>{{ .DiskStr }}</span>
     </div>
     <div class="sysinfo-progress">
       <div class="sysinfo-progress-fill" style="width: {{ .DiskUsedPct }}%"></div>
